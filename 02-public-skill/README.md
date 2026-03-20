@@ -19,7 +19,7 @@
 
 ### Cursor
 
-将 `SKILL.md` 内容复制到项目的 `.cursorrules` 文件中。
+下载 [`prd-writer.mdc`](./prd-writer.mdc)，放入项目根目录的 `.cursor/rules/` 文件夹下即可生效。
 
 ## 适合谁
 

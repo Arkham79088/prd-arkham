@@ -25,7 +25,7 @@
 
 ### Cursor
 
-将 `SKILL.md` 内容复制到项目的 `.cursorrules` 文件中。
+下载 [`prd-arkham.mdc`](./prd-arkham.mdc)，放入项目根目录的 `.cursor/rules/` 文件夹下即可生效。
 
 ## 文件说明
 
