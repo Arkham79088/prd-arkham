@@ -992,6 +992,285 @@ AskUserQuestion(
 
 ---
 
+## ⛔ 生成前必问（每次必须执行，不可跳过）
+
+在开始生成任何原型之前，必须先向用户提出以下问题（使用 `AskUserQuestion` 工具）：
+
+> **「是否为本次原型加入 PRD 标注层？」**
+> 标注层允许在原型上直接点击查看每个组件的交互说明，右下角有开关控制——开启时可看说明，关闭时正常操作原型。
+
+- **选「是」** → 按下方「PRD 标注层实现规范」生成，原型内嵌标注数据和交互面板
+- **选「否」** → 按常规流程生成，无需添加任何标注相关代码
+
+**不得跳过此步骤直接开始生成原型。**
+
+---
+
+## PRD 标注层实现规范（用户选「是」时执行）
+
+### 设计原则
+
+- **徽章触发，互不干扰**：每个关键组件旁附一个橙色小圆徽章（`i`），点徽章看 PRD；点组件本身正常交互，两者不冲突
+- **右侧面板展示**：点击徽章后，右侧滑入说明面板，不遮挡主界面
+- **全局 Toggle**：右下角浮动按钮控制标注层的显示与隐藏；关闭时徽章消失，原型与普通页面无异
+
+---
+
+### 必须添加的 HTML 结构
+
+在 `</body>` 之前插入以下三个元素：
+
+```html
+<!-- 1. 点击遮罩关闭面板 -->
+<div id="prd-overlay" onclick="closePanel()"></div>
+
+<!-- 2. 右侧说明面板 -->
+<div id="prd-panel">
+  <div class="panel-header">
+    <div>
+      <div class="panel-component" id="panel-component">组件</div>
+      <div class="panel-title" id="panel-title">交互说明</div>
+    </div>
+    <button class="panel-close" onclick="closePanel()">×</button>
+  </div>
+  <div class="panel-body" id="panel-body"></div>
+  <div class="panel-footer">📄 来源：{需求名称} PRD {版本号}</div>
+</div>
+
+<!-- 3. Toggle 浮动按钮 -->
+<button id="prd-toggle" onclick="togglePRD()">
+  <span>📋</span>
+  <span>PRD 标注</span>
+  <div class="toggle-pill"></div>
+</button>
+```
+
+---
+
+### 必须添加的 CSS
+
+```css
+/* Toggle 按钮 */
+#prd-toggle {
+  position: fixed; bottom: 28px; right: 28px; z-index: 999;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; border-radius: 24px;
+  background: #1a1a2e; color: #fff; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25);
+  transition: all .2s; user-select: none;
+}
+#prd-toggle:hover { transform: translateY(-2px); }
+.toggle-pill {
+  width: 34px; height: 18px; background: #444; border-radius: 9px;
+  position: relative; transition: background .2s;
+}
+.toggle-pill::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #fff; transition: transform .2s;
+}
+#prd-toggle.active .toggle-pill { background: #3b5bdb; }
+#prd-toggle.active .toggle-pill::after { transform: translateX(16px); }
+
+/* 标注徽章 */
+.prd-badge {
+  display: none; position: absolute;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #ff6b35; color: #fff;
+  font-size: 10px; font-weight: 700;
+  align-items: center; justify-content: center;
+  cursor: pointer; z-index: 200;
+  box-shadow: 0 2px 6px rgba(255,107,53,.5);
+  transition: transform .15s;
+  top: -7px; right: -7px;
+}
+.prd-badge:hover { transform: scale(1.2); }
+body.prd-mode .prd-badge { display: flex; }
+
+/* 标注模式：给有标注的组件加虚线边框 */
+body.prd-mode [data-prd] {
+  outline: 1.5px dashed rgba(255,107,53,.4);
+  outline-offset: 2px; border-radius: 4px;
+}
+
+/* 遮罩 */
+#prd-overlay {
+  display: none; position: fixed; inset: 0; z-index: 997;
+}
+#prd-overlay.show { display: block; }
+
+/* 右侧说明面板 */
+#prd-panel {
+  position: fixed; top: 0; right: -380px; width: 360px; height: 100vh;
+  background: #fff; z-index: 998;
+  box-shadow: -4px 0 24px rgba(0,0,0,.12);
+  transition: right .25s cubic-bezier(.4,0,.2,1);
+  display: flex; flex-direction: column;
+  border-left: 3px solid #ff6b35;
+}
+#prd-panel.open { right: 0; }
+.panel-header {
+  padding: 16px 20px; border-bottom: 1px solid #f0f2f8;
+  display: flex; align-items: center; justify-content: space-between;
+  background: #fff9f7;
+}
+.panel-component { font-size: 11px; color: #ff6b35; font-weight: 600; text-transform: uppercase; margin-bottom: 2px; }
+.panel-title { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+.panel-close {
+  width: 28px; height: 28px; border-radius: 50%; background: #f5f5f5;
+  border: none; cursor: pointer; font-size: 16px; color: #888;
+  display: flex; align-items: center; justify-content: center;
+}
+.panel-close:hover { background: #ffe8e0; color: #ff6b35; }
+.panel-body { flex: 1; overflow-y: auto; padding: 20px; }
+.panel-footer {
+  padding: 12px 20px; border-top: 1px solid #f0f2f8;
+  font-size: 11px; color: #bbb; background: #fafafa;
+}
+
+/* 说明内容样式 */
+.spec-section { margin-bottom: 20px; }
+.spec-label { font-size: 11px; font-weight: 700; color: #ff6b35; text-transform: uppercase; margin-bottom: 8px; }
+.spec-rule {
+  background: #fff9f7; border-left: 3px solid #ff6b35;
+  padding: 8px 12px; border-radius: 0 6px 6px 0;
+  font-size: 13px; color: #333; margin-bottom: 8px; line-height: 1.6;
+}
+.spec-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 600; margin-right: 4px;
+}
+.tag-required { background: #fee2e2; color: #991b1b; }
+.tag-optional { background: #e0f2fe; color: #0369a1; }
+
+/* 有徽章的容器需要 relative 定位 */
+.prd-anchor { position: relative; display: inline-block; }
+```
+
+---
+
+### 必须添加的 JavaScript
+
+```javascript
+// ── PRD 标注数据（见下方规范填写） ──
+const prdAnnotations = {
+  // "{元素ID}": { component: "组件名", title: "功能名", sections: [...] }
+};
+
+// ── 功能逻辑（固定，不需要修改） ──
+let prdMode = false;
+
+function togglePRD() {
+  prdMode = !prdMode;
+  const btn = document.getElementById('prd-toggle');
+  document.body.classList.toggle('prd-mode', prdMode);
+  btn.classList.toggle('active', prdMode);
+  if (!prdMode) closePanel();
+}
+
+function openPanel(id) {
+  if (!prdMode) return;
+  const data = prdAnnotations[id];
+  if (!data) return;
+  document.getElementById('panel-component').textContent = data.component;
+  document.getElementById('panel-title').textContent = data.title;
+  const body = document.getElementById('panel-body');
+  body.innerHTML = data.sections.map(s =>
+    `<div class="spec-section"><div class="spec-label">${s.label}</div><div class="spec-content">${s.content}</div></div>`
+  ).join('');
+  document.getElementById('prd-panel').classList.add('open');
+  document.getElementById('prd-overlay').classList.add('show');
+}
+
+function closePanel() {
+  document.getElementById('prd-panel').classList.remove('open');
+  document.getElementById('prd-overlay').classList.remove('show');
+}
+```
+
+---
+
+### prdAnnotations 数据填写规范
+
+每个标注条目对应一个关键交互组件，内容**直接来自 PRD.md 对应章节**，不得自行发挥：
+
+```javascript
+const prdAnnotations = {
+  "btn-submit": {
+    component: "操作按钮",          // 组件类型，简短
+    title: "提交按钮",              // 功能名称
+    sections: [
+      {
+        label: "点击行为",           // 说明分类标题
+        content: `<div class="spec-rule">
+          点击后触发表单校验 → 必填项为空时显示行内错误提示，不发请求<br>
+          → 校验通过后调用接口，loading 态禁用按钮<br>
+          → 成功：Toast 提示 + 跳转 / 关闭弹窗<br>
+          → 失败：Toast 提示错误原因，按钮恢复可点击
+        </div>`
+      },
+      {
+        label: "边界情况",
+        content: `<span class="spec-tag tag-required">必要</span>
+          接口超时（> 10s）同样触发失败 Toast，不能无限 loading`
+      }
+    ]
+  }
+};
+```
+
+**sections 常用 label 参考：**
+「触发方式」「点击行为」「显示规则」「权限控制」「边界情况」「与其他组件的关系」「待确认」
+
+---
+
+### 徽章挂载方式
+
+将需要标注的组件用 `.prd-anchor` 包裹，并在组件上加 `data-prd` 属性，然后在包裹层内放置徽章：
+
+```html
+<!-- 按钮示例 -->
+<div class="prd-anchor">
+  <button id="btn-submit" data-prd="btn-submit" class="btn-primary">提交</button>
+  <div class="prd-badge" onclick="openPanel('btn-submit')">i</div>
+</div>
+
+<!-- 输入框示例 -->
+<div class="prd-anchor">
+  <input id="input-name" data-prd="input-name" type="text" placeholder="请输入姓名">
+  <div class="prd-badge" onclick="openPanel('input-name')">i</div>
+</div>
+
+<!-- 表头列示例（徽章内联，不用绝对定位） -->
+<th>
+  <div style="display:inline-flex;align-items:center;gap:6px" data-prd="col-status">
+    状态
+    <div class="prd-badge" style="position:relative;top:auto;right:auto;width:14px;height:14px;font-size:9px"
+         onclick="openPanel('col-status')">i</div>
+  </div>
+</th>
+```
+
+---
+
+### 哪些组件必须加标注
+
+以下类型的组件**必须**加标注，不可遗漏：
+
+| 组件类型 | 说明 |
+|---------|------|
+| 主要操作按钮 | 提交、保存、新建、删除等触发业务逻辑的按钮 |
+| 搜索框 / 筛选器 | 匹配规则、防抖时长、与其他筛选的联动关系 |
+| 状态标签 | 各状态的定义和切换规则 |
+| 行级操作 | 每个行操作按钮的触发逻辑和权限说明 |
+| 分页控件 | 每页条数、翻页行为、边界处理 |
+| 关键展示字段 | 有业务含义的字段（如金额、到期日的计算规则） |
+
+以下可不加标注：纯展示文字、装饰性图标、面包屑导航、顶部 Logo。
+
+---
+
 ## 界面语言
 
 按以下优先级决定：
@@ -1156,7 +1435,6 @@ function setLoading(btn, loading) {
 
 空状态样式参考：
 ```html
-<!-- 空状态占位 -->
 <div class="flex flex-col items-center justify-center py-16 text-gray-400">
   <i class="fa-regular fa-folder-open text-4xl mb-3"></i>
   <p class="text-sm">{暂无数据说明文字}</p>
@@ -1165,7 +1443,6 @@ function setLoading(btn, loading) {
 
 骨架屏参考：
 ```html
-<!-- 骨架屏行（重复 3-5 次） -->
 <div class="flex items-center space-x-3 p-3 animate-pulse">
   <div class="h-4 bg-gray-200 rounded w-1/4"></div>
   <div class="h-4 bg-gray-200 rounded w-1/3"></div>
@@ -1221,13 +1498,15 @@ function setLoading(btn, loading) {
 
 ## 生成流程
 
-1. 从 PRD 提取所有页面、功能点和交互规则
-2. 判断布局模式（Web 后台 / 移动端 / 其他）
-3. 搭建页面结构（侧边栏 + 顶栏 + 内容区，或移动端框架）
-4. 填充符合目标市场习惯的示例数据
-5. 实现核心交互（Tab / 弹窗 / 表单校验 / Toast 等）
-6. 保存为 `原型.html`
-7. 如有原始截图，截图与 HTML 原型并存
+1. **询问用户是否加入 PRD 标注层**（AskUserQuestion，不可跳过）
+2. 从 PRD 提取所有页面、功能点和交互规则
+3. 判断布局模式（Web 后台 / 移动端 / 其他）
+4. 搭建页面结构
+5. 填充符合目标市场习惯的示例数据
+6. 实现核心交互（Tab / 弹窗 / 表单校验 / Toast 等）
+7. 如选择加入标注层：嵌入 CSS/JS 模板 → 填写 prdAnnotations 数据 → 挂载徽章
+8. 保存为 `原型.html`
+9. 如有原始截图，截图与 HTML 原型并存
 
 ---
 
@@ -1241,6 +1520,8 @@ function setLoading(btn, loading) {
 - [ ] 布局在浏览器中无溢出、无错位
 - [ ] 列表类组件有空状态或骨架屏（不只有有数据的版本）
 - [ ] 表单提交有失败路径可触发（红色 Toast 或错误提示）
+- [ ] （若选择标注层）prdAnnotations 已覆盖所有必须标注的组件类型
+- [ ] （若选择标注层）Toggle 按钮可正常开关，面板可正常打开和关闭
 
 </prototype-guide>
 
